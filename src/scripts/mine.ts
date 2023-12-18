@@ -15,6 +15,11 @@ interface IMineOptions {
   account: string;
 }
 
+async function getGasPrice(provider: ethers.providers.JsonRpcProvider) {
+  const currentGasPrice = await provider.getGasPrice();
+  return currentGasPrice.div(100).mul(GAS_PREMIUM);
+}
+
 let unique = 0;
 export const runMine = async (tick: string, options: IMineOptions) => {
   sayMinerLog();
@@ -45,12 +50,12 @@ This mining user configuration was not found!
   const network = await provider.getNetwork();
   printer.trace(`network is ${network.name} (chainID: ${network.chainId})`);
 
-  const currentGasPrice = await provider.getGasPrice();
-  const targetGasFee = currentGasPrice.div(100).mul(GAS_PREMIUM);
-
+  let targetGasFee = await getGasPrice(provider);
   printer.trace(`Current gas price usage ${bnUtils.fromWei(targetGasFee.toString(), 9)} gwei`);
-  const nonce = await miner.getTransactionCount();
+
+  let nonce = await miner.getTransactionCount();
   printer.trace(`nonce is ${nonce}`);
+
   const balance = await miner.getBalance();
   printer.trace(`balance is ${bnUtils.fromWei(balance.toString(), 18).dp(4).toString()}`);
 
@@ -67,6 +72,13 @@ This mining user configuration was not found!
     mineCount += 1;
     const callData = `data:application/json,{"p":"ierc-20","op":"mint","tick":"${tick}","amt":"${amt}","nonce":"${generateNonce()}${unique++}"}`;
     // console.log("🚀 ~ transactionData:", callData)
+
+    if (mineCount % 100000 === 0) {
+      // update gas and tx count
+      targetGasFee = await getGasPrice(provider);
+      nonce = await miner.getTransactionCount();
+    }
+
     const transaction = {
       type: 2,
       chainId: network.chainId,
@@ -74,7 +86,7 @@ This mining user configuration was not found!
       maxPriorityFeePerGas: targetGasFee,
       maxFeePerGas: targetGasFee,
       gasLimit: ethers.BigNumber.from("25000"),
-      nonce: nonce,
+      nonce,
       value: ethers.utils.parseEther("0"),
       data: stringToHex(callData),
     };
@@ -107,6 +119,9 @@ This mining user configuration was not found!
     }
 
     if (predictedTransactionHash.includes(workc)) {
+      const currentGasFee = await getGasPrice(provider);
+      printer.trace(`Current gas price usage ${bnUtils.fromWei(currentGasFee.toString(), 9)} gwei`);
+
       unique = 0;
       spinnies.succeed("mining", {
         text: `${mineCount} - ${predictedTransactionHash}`,
