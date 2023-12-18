@@ -68,6 +68,8 @@ This mining user configuration was not found!
     startTimer = timer,
     mineCount = 0;
 
+  let estimateGas = ethers.BigNumber.from("25000")
+
   while (true) {
     mineCount += 1;
     const callData = `data:application/json,{"p":"ierc-20","op":"mint","tick":"${tick}","amt":"${amt}","nonce":"${generateNonce()}${unique++}"}`;
@@ -76,6 +78,12 @@ This mining user configuration was not found!
     if (mineCount % 100000 === 0) {
       // update gas and tx count
       targetGasFee = await getGasPrice(provider);
+      estimateGas = await provider.estimateGas({
+        to: ZERO_ADDRESS,
+        data: stringToHex(callData),
+        value: ethers.utils.parseEther("0")
+      })
+      printer.info(`Current estimateGas ${estimateGas}`);
       nonce = await miner.getTransactionCount();
     }
 
@@ -85,7 +93,7 @@ This mining user configuration was not found!
       to: ZERO_ADDRESS,
       maxPriorityFeePerGas: targetGasFee,
       maxFeePerGas: targetGasFee,
-      gasLimit: ethers.BigNumber.from("25000"),
+      gasLimit: estimateGas,
       nonce,
       value: ethers.utils.parseEther("0"),
       data: stringToHex(callData),
